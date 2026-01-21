@@ -1,6 +1,6 @@
-// V3.1.1 最終優化版：
-// 1. 文字微調：ITDog 按鈕與彈窗統一簡化為「🌐 ITDog 測速」
-// 2. 保留所有 V3.1.0 核心功能 (雲端同步、Token 查看、獨立存儲)
+// V3.1.4 緊急修復版：
+// 1. 修復 SyntaxError: Identifier 'handleGetFastIPsText' has already been declared 錯誤
+// 2. 保留 V3.1.3 所有功能 (安全鎖定、API 複製、雲端同步)
 // 需要到 CF worker 環境變數(Environment Variables)裡添加 ADMIN_PASSWORD
 
 // --- 設定區域 ---
@@ -28,6 +28,8 @@ export default {
       try {
         switch (path) {
           case '/': return await serveHTML(env, request);
+          
+          // --- 核心接口 (需權限) ---
           case '/update':
             if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
             return await handleUpdate(env, request); 
@@ -35,22 +37,19 @@ export default {
             if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
             return await handleUploadResults(env, request);
           
-          // IP 獲取接口
           case '/ips': return await handleGetIPs(env, request);
           case '/ip.txt': return await handleGetIPs(env, request);
           case '/raw': return await handleRawIPs(env, request);
           
-          // 優質 IP 接口 (後端自動)
           case '/fast-ips': return await handleGetFastIPs(env, request);
           case '/fast-ips.txt': return await handleGetFastIPsText(env, request);
           
-          // 瀏覽器測速結果接口 (前端上傳)
           case '/browser-ips.txt': return await handleGetBrowserIPsText(env, request);
 
           case '/speedtest': return await handleSpeedTest(request, env);
           case '/itdog-data': return await handleItdogData(env, request);
           
-          // 管理員接口
+          // --- 管理接口 ---
           case '/admin-login': return await handleAdminLogin(request, env);
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
@@ -87,13 +86,19 @@ export default {
 
   // --- HTML 頁面 ---
   async function serveHTML(env, request) {
-    const data = await getStoredIPs(env);
-    const speedData = await getStoredSpeedIPs(env); 
-    const fastIPs = speedData.fastIPs || [];
-    
     const isLoggedIn = await verifyAdmin(request, env);
     const hasAdminPassword = !!env.ADMIN_PASSWORD;
     const tokenConfig = await getTokenConfig(env);
+    
+    // 安全性：未登入不讀取 KV
+    let data = { count: 0, lastUpdated: null };
+    let fastIPs = [];
+    
+    if (isLoggedIn) {
+        data = await getStoredIPs(env);
+        const speedData = await getStoredSpeedIPs(env);
+        fastIPs = speedData.fastIPs || [];
+    }
     
     let sessionId = null;
     if (isLoggedIn) {
@@ -106,7 +111,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 收集器 (V3.1.1)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.1.4)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; background: #f8fafc; color: #334155; padding: 20px; }
@@ -134,13 +139,15 @@ export default {
         .button-warning:hover { background: #d97706; }
         .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; }
         .button-secondary:hover { background: #f1f5f9; }
+        .button-purple { background: #8b5cf6; border: 1px solid #8b5cf6; }
+        .button-purple:hover { background: #7c3aed; }
         
         .dropdown { position: relative; display: inline-block; }
         .dropdown-content { 
             display: none; 
             position: absolute; 
             background-color: white; 
-            min-width: 190px;
+            min-width: 220px; 
             box-shadow: 0 8px 16px rgba(0,0,0,0.1); 
             z-index: 10; 
             border-radius: 8px; 
@@ -167,24 +174,16 @@ export default {
         .speed-slow { background: #fee2e2; color: #991b1b; }
         .small-btn { padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
         
-        .log-box {
-            background: #1e293b;
-            color: #10b981;
-            font-family: 'SF Mono', 'Courier New', monospace;
-            font-size: 0.85rem;
-            padding: 15px;
-            border-radius: 12px;
-            margin-top: 20px;
-            height: 200px;
-            overflow-y: auto;
-            border: 1px solid #334155;
-            display: none;
-            line-height: 1.5;
-        }
+        .log-box { background: #1e293b; color: #10b981; font-family: 'SF Mono', 'Courier New', monospace; font-size: 0.85rem; padding: 15px; border-radius: 12px; margin-top: 20px; height: 200px; overflow-y: auto; border: 1px solid #334155; display: none; line-height: 1.5; }
         .log-line { margin-bottom: 4px; border-bottom: 1px solid #334155; padding-bottom: 2px; }
         .log-error { color: #ef4444; }
         .log-info { color: #3b82f6; }
         .log-warn { color: #f59e0b; }
+
+        .lock-screen { text-align: center; padding: 50px 20px; }
+        .lock-icon { font-size: 60px; margin-bottom: 20px; }
+        .lock-input { padding: 12px 20px; font-size: 1rem; border: 2px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 300px; margin-bottom: 20px; transition: all 0.3s; }
+        .lock-input:focus { border-color: #3b82f6; outline: none; }
 
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 450px; box-shadow: 0 20px 25px rgba(0,0,0,0.1); }
@@ -206,23 +205,42 @@ export default {
 </head>
 <body>
     <div class="admin-indicator">
-        <div class="admin-badge ${isLoggedIn ? '' : 'logged-out'}" onclick="${isLoggedIn ? 'logout()' : 'openLoginModal()'}" id="admin-badge">
-            ${isLoggedIn ? '🔐 管理員' : '🔓 點擊登入'}
+        <div class="admin-badge ${isLoggedIn ? '' : 'logged-out'}" onclick="${isLoggedIn ? 'logout()' : ''}" id="admin-badge">
+            ${isLoggedIn ? '🔐 管理員' : '🔒 未登入'}
         </div>
+        ${isLoggedIn ? `<div class="dropdown-content" id="admin-dropdown" style="display:none; position:absolute; right:0;"><a onclick="logout()">退出登入</a></div>` : ''}
     </div>
 
     <div class="container">
         <div class="header">
             <div class="header-content">
-                <h1>Cloudflare 優選 IP 收集器</h1>
-                <p>V3.1.1</p>
+                <h1>Cloudflare 優選 IP 測速平台</h1>
+                <p>V3.1.4</p>
             </div>
             <div>
-                <a href="https://github.com/ethgan/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a>
-                <a href="https://t.me/yt_hytj" target="_blank" class="social-link">TG</a>
+                <a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a>
             </div>
         </div>
 
+        ${!isLoggedIn ? `
+        <!-- 未登入：鎖定畫面 -->
+        <div class="card lock-screen">
+            <div class="lock-icon">🔒</div>
+            <h2>系統已鎖定</h2>
+            <p style="color:#64748b; margin-bottom:30px;">請輸入管理員密碼以查看與下載數據。</p>
+            <div>
+                <input type="password" id="main-pass" class="lock-input" placeholder="輸入管理員密碼">
+                <br>
+                <div style="margin-bottom: 20px;">
+                    <label style="cursor:pointer; color:#64748b; font-size:0.95rem;">
+                        <input type="checkbox" id="remember-pass-main" style="margin-right:6px;">記住密碼
+                    </label>
+                </div>
+                <button class="button" onclick="loginMain()" id="main-login-btn">登入系統</button>
+            </div>
+        </div>
+        ` : `
+        <!-- 已登入：主控台 -->
         <div class="card">
             <h2>📊 系統狀態</h2>
             <div class="stats">
@@ -235,33 +253,43 @@ export default {
                 <button class="button" onclick="updateIPs()" id="update-btn">🔄 立即更新庫</button>
                 <button class="button button-warning" onclick="startSpeedTest()" id="speedtest-btn">⚡ 瀏覽器測速</button>
                 
+                <!-- 下載中心 -->
                 <div class="dropdown">
-                    <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" class="button button-success dropdown-btn" download="cloudflare_fast_ips.txt">
-                        🚀 下載優質 IP ▼
-                    </a>
+                    <button class="button button-success">🚀 下載中心 ▼</button>
                     <div class="dropdown-content">
-                        <a href="${addAuthToUrl('/ips', sessionId, tokenConfig)}" download="all_ips.txt">📥 下載完整庫</a>
-                        <a href="${addAuthToUrl('/browser-ips.txt', sessionId, tokenConfig)}" download="my_speedtest_result.txt">💾 下載本機測速結果</a>
+                        <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" download="cloudflare_fast_ips.txt">🚀 下載後端優選 IP</a>
+                        <a onclick="downloadBrowserResults()">⚡ 下載本機測速結果</a>
+                        <a href="${addAuthToUrl('/ips', sessionId, tokenConfig)}" download="all_ips.txt">📦 下載完整 IP 庫</a>
                     </div>
                 </div>
 
+                <!-- 線上查看 -->
                 <div class="dropdown">
-                    <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" class="button button-secondary dropdown-btn" target="_blank">
-                        🔗 查看優質 IP ▼
-                    </a>
+                    <button class="button button-secondary">📄 線上查看 ▼</button>
                     <div class="dropdown-content">
-                        <a href="${addAuthToUrl('/ip.txt', sessionId, tokenConfig)}" target="_blank">📋 查看完整庫</a>
-                        <a href="${addAuthToUrl('/browser-ips.txt', sessionId, tokenConfig)}" target="_blank">📄 查看本機測速結果</a>
+                        <a href="${addAuthToUrl('/fast-ips.txt', sessionId, tokenConfig)}" target="_blank">🚀 查看後端優選 IP</a>
+                        <a href="${addAuthToUrl('/browser-ips.txt', sessionId, tokenConfig)}" target="_blank">⚡ 查看本機測速結果</a>
+                        <a href="${addAuthToUrl('/ip.txt', sessionId, tokenConfig)}" target="_blank">📦 查看完整 IP 庫</a>
+                    </div>
+                </div>
+
+                <!-- API 連結 -->
+                <div class="dropdown">
+                    <button class="button button-purple">🔌 複製 API 連結 ▼</button>
+                    <div class="dropdown-content">
+                        <a onclick="copyApiUrl('/fast-ips.txt')">🚀 優選 IP API (後端)</a>
+                        <a onclick="copyApiUrl('/browser-ips.txt')">⚡ 優選 IP API (本機)</a>
+                        <a onclick="copyApiUrl('/ips')">📦 完整 IP 庫 API</a>
                     </div>
                 </div>
 
                 <button class="button" onclick="openItdogModal()" style="background: #8b5cf6;">🌐 ITDog 測速</button>
-                <button class="button ${isLoggedIn ? 'button-secondary' : ''}" onclick="openTokenModal()" id="token-btn" ${!isLoggedIn ? 'disabled' : ''}>🔑 Token 管理</button>
+                <button class="button button-secondary" onclick="openTokenModal()" id="token-btn">🔑 Token 管理</button>
             </div>
             
             <div id="log-box" class="log-box"></div>
             
-             ${isLoggedIn && tokenConfig ? `
+             ${tokenConfig ? `
             <div style="margin-top: 15px; padding: 10px; background: #f1f5f9; border-radius: 8px; font-size: 0.85rem;">
                 <strong>當前 Token:</strong> <span style="font-family:monospace; background:white; padding:2px 6px; border-radius:4px;">${tokenConfig.token}</span>
                 <span style="color:#64748b; margin-left:10px;">(過期: ${tokenConfig.neverExpire ? '永不' : new Date(tokenConfig.expires).toLocaleDateString()})</span>
@@ -270,7 +298,7 @@ export default {
 
         <div class="card">
             <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                <h2 id="list-title">🏆 優質 IP 列表</h2>
+                <h2 id="list-title">🏆 優選 IP 列表</h2>
                 <button class="small-btn" onclick="copyAllFastIPs()">📋 複製所有 IP</button>
             </div>
             
@@ -297,16 +325,17 @@ export default {
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
             </div>
         </div>
+        `}
     </div>
 
     <!-- 模態框組件 -->
     <div class="modal" id="itdog-modal">
         <div class="modal-content">
             <h3>🌐 ITDog 測速</h3>
-            <p style="margin-bottom:15px; color:#475569; font-size:0.95rem;">此功能將複製「優質 IP 列表」中的 IP 地址 (約 ${FAST_IP_COUNT} 個)。請前往 ITDog 的批量 Ping/TCPing 頁面進行測試，以獲得最準確的連線速度。</p>
+            <p style="margin-bottom:15px; color:#475569; font-size:0.95rem;">此功能將複製「優選 IP 列表」中的 IP 地址 (約 ${FAST_IP_COUNT} 個)。請前往 ITDog 的批量 Ping/TCPing 頁面進行測試，以獲得最準確的連線速度。</p>
             <div style="text-align:right;">
                 <button class="button button-secondary" onclick="document.getElementById('itdog-modal').style.display='none'">關閉</button>
-                <button class="button" onclick="copyIPsForItdog()">📋 複製優質 IP 並前往</button>
+                <button class="button" onclick="copyIPsForItdog()">📋 複製優選 IP 並前往</button>
             </div>
         </div>
     </div>
@@ -318,9 +347,14 @@ export default {
                 ${hasAdminPassword ? '請輸入密碼' : '⚠️ 未設置 ADMIN_PASSWORD 環境變數'}
             </div>
             <input type="password" id="admin-pass" placeholder="輸入密碼" style="width:100%; padding:10px; margin:15px 0; border:1px solid #cbd5e1; border-radius:8px;" ${!hasAdminPassword?'disabled':''}>
+            <div style="margin-bottom: 20px; text-align: left;">
+                <label style="cursor:pointer; color:#64748b; font-size:0.95rem;">
+                    <input type="checkbox" id="remember-pass-modal" style="margin-right:6px;">記住密碼
+                </label>
+            </div>
             <div style="text-align:right;">
                 <button class="button button-secondary" onclick="document.getElementById('login-modal').style.display='none'">取消</button>
-                <button class="button" onclick="login()" ${!hasAdminPassword?'disabled':''} id="login-confirm-btn">登入</button>
+                <button class="button" onclick="loginModal()" ${!hasAdminPassword?'disabled':''} id="login-confirm-btn">登入</button>
             </div>
         </div>
     </div>
@@ -348,19 +382,31 @@ export default {
         const DISPLAY_COUNT = ${FAST_IP_COUNT};
 
         document.addEventListener('DOMContentLoaded', function() {
-            const passInput = document.getElementById('admin-pass');
-            if(passInput) {
-                passInput.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault(); 
-                        login();
-                    }
-                });
+            if (!isLoggedIn) {
+                const savedPass = localStorage.getItem('cf_admin_pass');
+                if (savedPass) {
+                    document.getElementById('main-pass').value = savedPass;
+                    document.getElementById('remember-pass-main').checked = true;
+                }
             }
+
+            const passInputs = ['main-pass', 'admin-pass'];
+            passInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault(); 
+                            if(id === 'main-pass') loginMain(); else loginModal();
+                        }
+                    });
+                }
+            });
         });
 
         function addLog(msg, type='normal') {
             const box = document.getElementById('log-box');
+            if(!box) return;
             box.style.display = 'block';
             const time = new Date().toLocaleTimeString();
             let className = 'log-line';
@@ -372,7 +418,8 @@ export default {
             box.scrollTop = box.scrollHeight;
         }
         function clearLog() {
-            document.getElementById('log-box').innerHTML = '';
+            const box = document.getElementById('log-box');
+            if(box) box.innerHTML = '';
         }
 
         async function api(path, method='GET', body=null) {
@@ -392,6 +439,41 @@ export default {
 
             const res = await fetch(url, opts);
             return res.json();
+        }
+
+        async function loginMain() {
+            const pwd = document.getElementById('main-pass').value;
+            const remember = document.getElementById('remember-pass-main').checked;
+            performLogin(pwd, remember);
+        }
+
+        async function loginModal() {
+            const pwd = document.getElementById('admin-pass').value;
+            const remember = document.getElementById('remember-pass-modal').checked;
+            performLogin(pwd, remember);
+        }
+
+        async function performLogin(password, remember) {
+            if(!password) return alert('請輸入密碼');
+            
+            const res = await api('/admin-login', 'POST', {password: password});
+            if(res.success) {
+                if(remember) localStorage.setItem('cf_admin_pass', password);
+                else localStorage.removeItem('cf_admin_pass');
+                
+                const url = new URL(window.location.href);
+                url.searchParams.set('session', res.sessionId);
+                window.location.href = url.toString();
+            } else {
+                alert(res.error);
+            }
+        }
+        
+        async function logout() {
+            await api('/admin-logout', 'POST');
+            const url = new URL(window.location.href);
+            url.searchParams.delete('session');
+            window.location.href = url.toString();
         }
 
         async function updateIPs() {
@@ -502,7 +584,7 @@ export default {
                     newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${item.colo}</span><span class="ip-address">\${item.ip}</span><span class="speed-result \${speedClass}">\${item.latency}ms</span></div><div class="action-buttons"><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div></div>\`;
                 });
                 listEl.innerHTML = newHtml;
-                document.getElementById('list-title').innerHTML = '🏆 優質 IP 列表 (本地實測)';
+                document.getElementById('list-title').innerHTML = '🏆 優選 IP 列表 (本地實測)';
                 
                 addLog('☁️ 正在上傳測速結果到伺服器...', 'info');
                 try {
@@ -520,34 +602,36 @@ export default {
             setTimeout(() => document.getElementById('progress').style.display = 'none', 3000);
         }
 
-        function openLoginModal() { 
-            document.getElementById('login-modal').style.display='flex'; 
-            setTimeout(() => document.getElementById('admin-pass').focus(), 100);
+        function downloadBrowserResults() {
+            const items = document.querySelectorAll('.ip-item');
+            if(items.length === 0) return alert('列表為空，請先進行瀏覽器測速！');
+
+            let content = '';
+            items.forEach(item => {
+                const ip = item.dataset.ip;
+                const speed = item.querySelector('.speed-result').innerText;
+                const colo = item.querySelector('.colo-badge').innerText;
+                content += \`\${ip}#\${colo}:\${speed}\\n\`;
+            });
+
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = \`my_speedtest_\${new Date().toISOString().slice(0,10)}.txt\`;
+            a.click();
+            window.URL.revokeObjectURL(url);
         }
-        
-        async function login() {
-            const pwd = document.getElementById('admin-pass').value;
-            const btn = document.getElementById('login-confirm-btn');
-            btn.disabled = true;
-            btn.innerText = '登入中...';
+
+        function copyApiUrl(endpoint) {
+            if(!tokenConfig || !tokenConfig.token) return alert('請先在「Token 管理」中生成一個 Token 才能使用 API 功能！');
             
-            const res = await api('/admin-login', 'POST', {password: pwd});
-            if(res.success) {
-                const url = new URL(window.location.href);
-                url.searchParams.set('session', res.sessionId);
-                window.location.href = url.toString();
-            } else {
-                alert(res.error);
-                btn.disabled = false;
-                btn.innerText = '登入';
-            }
-        }
-        
-        async function logout() {
-            await api('/admin-logout', 'POST');
-            const url = new URL(window.location.href);
-            url.searchParams.delete('session');
-            window.location.href = url.toString();
+            const fullUrl = window.location.origin + endpoint + '?token=' + tokenConfig.token;
+            navigator.clipboard.writeText(fullUrl).then(() => {
+                alert('已複製 API 連結：\\n' + fullUrl);
+            }).catch(err => {
+                alert('複製失敗，請手動複製');
+            });
         }
 
         function openTokenModal() { document.getElementById('token-modal').style.display='flex'; }
@@ -596,30 +680,87 @@ export default {
     });
   }
 
+  // 上傳前端測速結果 (寫入獨立 Key: browser_fast_ips)
   async function handleUploadResults(env, request) {
       if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
       try {
           const { fastIPs } = await request.json();
           if (!fastIPs || !Array.isArray(fastIPs)) return jsonResponse({ error: '無效數據' }, 400);
+          
           await env.IP_STORAGE.put('browser_fast_ips', JSON.stringify({
               fastIPs: fastIPs,
               lastTested: new Date().toISOString(),
               count: fastIPs.length,
               source: 'browser_upload'
           }));
+          
           return jsonResponse({ success: true });
       } catch (e) {
           return jsonResponse({ error: e.message }, 500);
       }
   }
 
-  async function handleGetBrowserIPsText(env, request) {
+  // 獲取後端自動測速結果文本 (帶 format 參數)
+  async function handleGetFastIPsText(env, request) {
     if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401);
-    const data = await getStoredBrowserIPs(env);
-    const txt = (data.fastIPs||[]).map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
-    return new Response(txt, { headers: { 'Content-Type': 'text/plain', 'Content-Disposition': 'inline; filename="browser_speedtest.txt"' } });
+    const url = new URL(request.url);
+    const format = url.searchParams.get('format');
+    const data = await getStoredSpeedIPs(env);
+    const list = data.fastIPs || [];
+    
+    let txt = '';
+    if (format === 'ip') {
+        txt = list.map(i => i.ip).join('\n');
+    } else {
+        txt = list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    }
+    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="fast_ips.txt"' } });
   }
 
+  // 獲取瀏覽器測速結果文本 (帶 format 參數)
+  async function handleGetBrowserIPsText(env, request) {
+    if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401);
+    const url = new URL(request.url);
+    const format = url.searchParams.get('format');
+    const data = await getStoredBrowserIPs(env);
+    const list = data.fastIPs || [];
+    
+    let txt = '';
+    if (format === 'ip') {
+        txt = list.map(i => i.ip).join('\n');
+    } else {
+        txt = list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    }
+    return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="browser_speedtest.txt"' } });
+  }
+
+  // 獲取後端優選 IP (JSON)
+  async function handleGetFastIPs(env, request) { 
+      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      return jsonResponse(await getStoredSpeedIPs(env)); 
+  }
+  
+  // 獲取所有 IP (TXT)
+  async function handleGetIPs(env, request) { 
+      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      const d = await getStoredIPs(env); 
+      return new Response(d.ips.join('\n'), { headers: {'Content-Type': 'text/plain'} }); 
+  }
+  
+  // 獲取所有 IP (JSON)
+  async function handleRawIPs(env, request) { 
+      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      return jsonResponse(await getStoredIPs(env)); 
+  }
+  
+  // ITDog 數據接口
+  async function handleItdogData(env, request) { 
+      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      const d = await getStoredSpeedIPs(env); 
+      return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); 
+  }
+
+  // 後端自動測速 (寫入 cloudflare_fast_ips)
   async function autoSpeedTestAndStore(env, ips) {
     if (!ips || !ips.length) return null;
     let randomIPs = [...ips];
@@ -648,6 +789,7 @@ export default {
     }));
   }
 
+  // --- 通用函數 ---
   async function handleSpeedTest(request, env) {
     const url = new URL(request.url);
     const ip = url.searchParams.get('ip');
@@ -748,12 +890,6 @@ export default {
       return false;
     } catch { return false; }
   }
-
-  async function handleGetFastIPsText(env, request) { if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); const d = await getStoredSpeedIPs(env); return new Response((d.fastIPs||[]).map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n'), { headers: { 'Content-Type': 'text/plain', 'Content-Disposition': 'inline; filename="fast_ips.txt"' } }); }
-  async function handleGetFastIPs(env, request) { if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); return jsonResponse(await getStoredSpeedIPs(env)); }
-  async function handleGetIPs(env, request) { if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); const d = await getStoredIPs(env); return new Response(d.ips.join('\n'), { headers: {'Content-Type': 'text/plain'} }); }
-  async function handleRawIPs(env, request) { if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); return jsonResponse(await getStoredIPs(env)); }
-  async function handleItdogData(env, request) { if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); const d = await getStoredSpeedIPs(env); return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); }
 
   async function getStoredIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('cloudflare_ips')) || {ips:[]}; } catch { return {ips:[]}; } }
   async function getStoredSpeedIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('cloudflare_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
