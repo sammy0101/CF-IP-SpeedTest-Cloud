@@ -1,12 +1,9 @@
-# Cloudflare Worker 優選 IP 收集器 (V3.1.0)
+# Cloudflare Worker 優選 IP 收集器
 
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 這是一個運行在 Cloudflare Workers 上的無伺服器腳本，用於自動收集、過濾並測試 Cloudflare 的優選 IP。
-
-**V3.1.0 核心特色：本地測速，雲端同步。**
-不僅擁有後端自動篩選功能，還具備瀏覽器端真實延遲測速，並能將您的本地測速結果同步至雲端 KV 儲存，隨時隨地透過 Token 訪問。
 
 ---
 
