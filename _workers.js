@@ -1,7 +1,6 @@
-// V3.1.4 緊急修復版：
-// 1. 修復 SyntaxError: Identifier 'handleGetFastIPsText' has already been declared 錯誤
-// 2. 保留 V3.1.3 所有功能 (安全鎖定、API 複製、雲端同步)
-// 需要到 CF worker 環境變數(Environment Variables)裡添加 ADMIN_PASSWORD
+// V3.1.11 端口資訊版：
+// 1. 新增「支援端口資訊」卡片 (HTTP/HTTPS)
+// 2. 保持所有功能：公開 API、無需 Token、子域名適配
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -21,15 +20,33 @@ export default {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
       const path = url.pathname;
+      const hostname = url.hostname.toLowerCase();
       
       if (!env.IP_STORAGE) return new Response('錯誤：KV 未綁定', {status: 500});
       if (request.method === 'OPTIONS') return handleCORS();
 
       try {
+        // --- 1. 子域名路由邏輯 (公開訪問) ---
+        // 規則：fast.xxx 或 fast-xxx 開頭 -> 返回後端優選 IP
+        if (hostname.startsWith('fast.') || hostname.startsWith('fast-')) {
+            return await handleGetFastIPsText(env, request);
+        }
+        
+        // 規則：browser.xxx 或 web.xxx 開頭 -> 返回瀏覽器測速 IP
+        if (hostname.startsWith('browser.') || hostname.startsWith('web.')) {
+            return await handleGetBrowserIPsText(env, request);
+        }
+
+        // 規則：all.xxx 或 ips.xxx 開頭 -> 返回所有 IP
+        if (hostname.startsWith('all.') || hostname.startsWith('ips.') || hostname.startsWith('raw.')) {
+            return await handleGetIPs(env, request);
+        }
+
+        // --- 2. 主域名常規路由 ---
         switch (path) {
           case '/': return await serveHTML(env, request);
           
-          // --- 核心接口 (需權限) ---
+          // --- 核心接口 (需權限，涉及寫入操作) ---
           case '/update':
             if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
             return await handleUpdate(env, request); 
@@ -37,6 +54,7 @@ export default {
             if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
             return await handleUploadResults(env, request);
           
+          // --- 數據讀取接口 (改為公開，無需權限) ---
           case '/ips': return await handleGetIPs(env, request);
           case '/ip.txt': return await handleGetIPs(env, request);
           case '/raw': return await handleRawIPs(env, request);
@@ -49,7 +67,7 @@ export default {
           case '/speedtest': return await handleSpeedTest(request, env);
           case '/itdog-data': return await handleItdogData(env, request);
           
-          // --- 管理接口 ---
+          // --- 管理接口 (需權限) ---
           case '/admin-login': return await handleAdminLogin(request, env);
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
@@ -84,7 +102,7 @@ export default {
     return url;
   }
 
-  // --- HTML 頁面 ---
+  // --- HTML 頁面 (保留權限驗證) ---
   async function serveHTML(env, request) {
     const isLoggedIn = await verifyAdmin(request, env);
     const hasAdminPassword = !!env.ADMIN_PASSWORD;
@@ -111,7 +129,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.1.4)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.1.11)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; background: #f8fafc; color: #334155; padding: 20px; }
@@ -185,6 +203,12 @@ export default {
         .lock-input { padding: 12px 20px; font-size: 1rem; border: 2px solid #e2e8f0; border-radius: 8px; width: 100%; max-width: 300px; margin-bottom: 20px; transition: all 0.3s; }
         .lock-input:focus { border-color: #3b82f6; outline: none; }
 
+        /* 端口資訊樣式 */
+        .port-box { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .port-tag { padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; border: 1px solid transparent; font-weight: 600; }
+        .tag-http { background: #fff1f2; color: #be123c; border-color: #fda4af; }
+        .tag-https { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 450px; box-shadow: 0 20px 25px rgba(0,0,0,0.1); }
         .admin-indicator { position: fixed; top: 20px; right: 20px; z-index: 900; }
@@ -215,7 +239,7 @@ export default {
         <div class="header">
             <div class="header-content">
                 <h1>Cloudflare 優選 IP 測速平台</h1>
-                <p>V3.1.4</p>
+                <p>V3.1.11</p>
             </div>
             <div>
                 <a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a>
@@ -277,9 +301,9 @@ export default {
                 <div class="dropdown">
                     <button class="button button-purple">🔌 複製 API 連結 ▼</button>
                     <div class="dropdown-content">
-                        <a onclick="copyApiUrl('/fast-ips.txt')">🚀 優選 IP API (後端)</a>
-                        <a onclick="copyApiUrl('/browser-ips.txt')">⚡ 優選 IP API (本機)</a>
-                        <a onclick="copyApiUrl('/ips')">📦 完整 IP 庫 API</a>
+                        <a onclick="copyApiUrl('fast')">🚀 複製後端優選 IP API</a>
+                        <a onclick="copyApiUrl('browser')">⚡ 複製本機測速結果 API</a>
+                        <a onclick="copyApiUrl('all')">📦 複製完整 IP 庫 API</a>
                     </div>
                 </div>
 
@@ -294,6 +318,34 @@ export default {
                 <strong>當前 Token:</strong> <span style="font-family:monospace; background:white; padding:2px 6px; border-radius:4px;">${tokenConfig.token}</span>
                 <span style="color:#64748b; margin-left:10px;">(過期: ${tokenConfig.neverExpire ? '永不' : new Date(tokenConfig.expires).toLocaleDateString()})</span>
             </div>` : ''}
+        </div>
+
+        <!-- 端口資訊卡片 -->
+        <div class="card">
+            <h2>📡 支援端口資訊</h2>
+            <div style="margin-bottom: 20px;">
+                <div style="color:#be123c; font-weight:600; margin-bottom:5px;">HTTP 支援端口：</div>
+                <div class="port-box">
+                    <span class="port-tag tag-http">80</span>
+                    <span class="port-tag tag-http">8080</span>
+                    <span class="port-tag tag-http">8880</span>
+                    <span class="port-tag tag-http">2052</span>
+                    <span class="port-tag tag-http">2082</span>
+                    <span class="port-tag tag-http">2086</span>
+                    <span class="port-tag tag-http">2095</span>
+                </div>
+            </div>
+            <div>
+                <div style="color:#1d4ed8; font-weight:600; margin-bottom:5px;">HTTPS 支援端口：</div>
+                <div class="port-box">
+                    <span class="port-tag tag-https">443</span>
+                    <span class="port-tag tag-https">2053</span>
+                    <span class="port-tag tag-https">2083</span>
+                    <span class="port-tag tag-https">2087</span>
+                    <span class="port-tag tag-https">2096</span>
+                    <span class="port-tag tag-https">8443</span>
+                </div>
+            </div>
         </div>
 
         <div class="card">
@@ -623,12 +675,24 @@ export default {
             window.URL.revokeObjectURL(url);
         }
 
-        function copyApiUrl(endpoint) {
-            if(!tokenConfig || !tokenConfig.token) return alert('請先在「Token 管理」中生成一個 Token 才能使用 API 功能！');
+        function copyApiUrl(type) {
+            const currentHost = window.location.host; 
+            const parts = currentHost.split('.');
+            let newHost = '';
+
+            // 支援子域名邏輯
+            if (parts.length >= 3) {
+                parts[0] = type;
+                newHost = parts.join('.');
+            } else {
+                newHost = type + '.' + currentHost;
+            }
             
-            const fullUrl = window.location.origin + endpoint + '?token=' + tokenConfig.token;
+            // 僅複製域名 (不含 Token，不含 http)
+            const fullUrl = newHost;
+            
             navigator.clipboard.writeText(fullUrl).then(() => {
-                alert('已複製 API 連結：\\n' + fullUrl);
+                alert('已複製 API 域名 (不含 Token)：\\n' + fullUrl);
             }).catch(err => {
                 alert('複製失敗，請手動複製');
             });
@@ -700,9 +764,9 @@ export default {
       }
   }
 
-  // 獲取後端自動測速結果文本 (帶 format 參數)
+  // 獲取後端自動測速結果文本 (已公開)
   async function handleGetFastIPsText(env, request) {
-    if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401);
+    // 移除權限驗證：if (!await verifyAdmin(request, env)) ...
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
@@ -717,9 +781,9 @@ export default {
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="fast_ips.txt"' } });
   }
 
-  // 獲取瀏覽器測速結果文本 (帶 format 參數)
+  // 獲取瀏覽器測速結果文本 (已公開)
   async function handleGetBrowserIPsText(env, request) {
-    if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401);
+    // 移除權限驗證
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
@@ -734,28 +798,28 @@ export default {
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'inline; filename="browser_speedtest.txt"' } });
   }
 
-  // 獲取後端優選 IP (JSON)
+  // 獲取後端優選 IP (JSON) - 已公開
   async function handleGetFastIPs(env, request) { 
-      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      // 移除權限驗證
       return jsonResponse(await getStoredSpeedIPs(env)); 
   }
   
-  // 獲取所有 IP (TXT)
+  // 獲取所有 IP (TXT) - 已公開
   async function handleGetIPs(env, request) { 
-      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      // 移除權限驗證
       const d = await getStoredIPs(env); 
       return new Response(d.ips.join('\n'), { headers: {'Content-Type': 'text/plain'} }); 
   }
   
-  // 獲取所有 IP (JSON)
+  // 獲取所有 IP (JSON) - 已公開
   async function handleRawIPs(env, request) { 
-      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      // 移除權限驗證
       return jsonResponse(await getStoredIPs(env)); 
   }
   
-  // ITDog 數據接口
+  // ITDog 數據接口 - 已公開
   async function handleItdogData(env, request) { 
-      if (!await verifyAdmin(request, env)) return jsonResponse({ error: '無權限' }, 401); 
+      // 移除權限驗證
       const d = await getStoredSpeedIPs(env); 
       return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); 
   }
@@ -899,6 +963,6 @@ export default {
   function ipToNum(ip) { return ip.split('.').reduce((a,b) => (a<<8)+parseInt(b),0)>>>0; }
   function numToIp(n) { return [(n>>>24)&255, (n>>>16)&255, (n>>>8)&255, n&255].join('.'); }
   function isValidIPv4(ip) { return /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip); }
-  async function fetchURLWithTimeout(url) { const c = new AbortController(); setTimeout(() => c.abort(), 8000); const res = await fetch(url, { signal: c.signal, headers: {'User-Agent': 'CF-Worker'} }); if(!res.ok) throw new Error(res.status); return await res.text(); }
+  async function fetchURLWithTimeout(url) { const c = new AbortController(); setTimeout(() => c.abort(), 8000); const res = await fetch(url, { signal: c.signal, headers: {'User-Agent': 'CF-Worker'} }); if(!res.ok) throw new Error('HTTP Error: ' + res.status + ' ' + res.statusText); return await res.text(); }
   function jsonResponse(data, status=200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }); }
   function handleCORS() { return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } }); }
