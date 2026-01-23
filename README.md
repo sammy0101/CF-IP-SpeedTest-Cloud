@@ -109,4 +109,3 @@
 
 ---
 *Based on CF-Worker-BestIP-collector V3.1.11*
-```
