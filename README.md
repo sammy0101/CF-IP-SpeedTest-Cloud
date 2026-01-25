@@ -3,7 +3,6 @@
 基於 Cloudflare Worker 與 KV Storage 構建的自動化優選 IP 收集、測速與分發平台。
 集成了後端自動測速、瀏覽器端真實延遲測試、以及可視化的管理後台。
 
-> **當前版本**: V3.1.11
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-3.1.11-blue)
@@ -21,7 +20,7 @@
     *   Token 管理系統（用於 API 寫入權限控制）。
     *   查看系統狀態、IP 總數、更新時間。
 *   **🔌 便捷 API 集成**: 提供純淨的 API 連結複製功能，方便導入 Surge, Clash, Sing-box 等工具。
-*   **📊 端口資訊顯示**: 主頁面清晰列出 Cloudflare 支援的 HTTP/HTTPS 端口 (V3.1.11 新增)。
+*   **📊 端口資訊顯示**: 主頁面清晰列出 Cloudflare 支援的 HTTP/HTTPS 端口
 *   **💾 KV 持久化存儲**: 數據存儲在 Cloudflare KV 中，確保快速讀取。
 
 ## 🛠️ 部署指南
@@ -106,6 +105,3 @@
 
 ## ⚠️ 免責聲明
 本項目僅供學習與技術研究使用。請勿將其用於任何非法用途。IP 來源取自網絡公開資源，本項目不保證 IP 的可用性與速度。
-
----
-*Based on CF-Worker-BestIP-collector V3.1.11*
