@@ -1,6 +1,7 @@
-// V3.2.9 配色優化版：
-// 1. UI 優化：ITDog 按鈕改為 "深粉紅色" (Deep Pink)，解決顏色太淺看不清的問題
-// 2. 保持 V3.2.7 的精簡儀表板與 V3.2.6 的 API 修復
+// V3.3.1 全域中文化版：
+// 1. 下載/API/線上查看的結果現在會包含中文地區 (例如: HKG(香港))
+// 2. 保持 V3.2.10 的所有配色與精簡儀表板
+// 3. 內建完整的 Colo Code 翻譯表
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -10,6 +11,15 @@ const AUTO_TEST_MAX_IPS = 500; // 測速最大數量
 const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
+
+// 機房代碼對照表 (全域使用)
+const COLO_MAP = {
+    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'SIN': '新加坡',
+    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'ORD': '芝加哥', 'JFK': '紐約',
+    'FRA': '法蘭克福', 'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'CDG': '巴黎',
+    'BKK': '曼谷', 'KUL': '吉隆坡', 'MNL': '馬尼拉', 'HAN': '河內', 'SGN': '胡志明',
+    'SYD': '雪梨', 'MEL': '墨爾本', 'YYZ': '多倫多', 'YVR': '溫哥華'
+};
 // ----------------
 
 export default {
@@ -101,7 +111,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.2.9)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.1)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -143,7 +153,6 @@ export default {
         .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-secondary:hover { background: #f1f5f9; }
         .button-purple { background: #8b5cf6; } .button-purple:hover { background: #7c3aed; }
         .button-warning { background: #f59e0b; } .button-warning:hover { background: #d97706; }
-        /* 新增：深粉色 ITDog 按鈕 */
         .button-pink { background: #db2777; } .button-pink:hover { background: #be185d; }
         .button-slate { background: #64748b; } .button-slate:hover { background: #475569; }
 
@@ -151,7 +160,7 @@ export default {
         .ip-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: white; }
         .ip-info { display: flex; align-items: center; gap: 12px; }
         .ip-address { font-family: monospace; font-weight: 600; font-size: 1.05rem; min-width: 140px; }
-        .colo-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-weight: 600; min-width: 45px; text-align: center; }
+        .colo-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: #e0e7ff; color: #4338ca; font-weight: 600; min-width: auto; text-align: center; white-space: nowrap; }
         .speed-result { font-size: 0.85rem; padding: 4px 10px; border-radius: 6px; background: var(--bg-inner); min-width: 70px; text-align: center; font-weight: 600; }
         .speed-fast-bg { background: #dcfce7; color: #166534; } 
         
@@ -183,11 +192,11 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.2.9</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.1</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
-        <!-- 儀表板區域 (精簡版：僅保留連通性測試) -->
+        <!-- 儀表板區域 -->
         <div class="card">
             <h2>🌍 當前網絡信息 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:10px;">(每5秒自動刷新)</span></h2>
             
@@ -282,8 +291,11 @@ export default {
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
+                    const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
+                    const coloDisplay = colo + cnName;
+                    
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
-                    return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${colo}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
+                    return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${coloDisplay}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
             </div>
         </div>
@@ -296,6 +308,8 @@ export default {
     <div class="modal" id="token-modal"><div class="modal-content"><h3>⚙️ Token 設定</h3><input type="text" id="token-in" placeholder="Token" style="width:100%; padding:10px; margin:10px 0;"><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button><button class="button" onclick="saveToken()">儲存</button></div></div></div>
 
     <script>
+        // 傳遞給前端 JS 使用
+        const COLO_MAP = ${JSON.stringify(COLO_MAP)};
         let sessionId = '${sessionId || ''}';
         let isLoggedIn = ${isLoggedIn};
         let tokenConfig = ${tokenConfig ? JSON.stringify(tokenConfig) : 'null'};
@@ -315,7 +329,6 @@ export default {
 
         // === 儀表板邏輯 ===
         function initDashboard() {
-            // 延遲測試
             checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
             checkLatency('https://openai.com/favicon.ico', 'lat-openai');
             checkLatency('https://www.cloudflare.com/favicon.ico', 'lat-cf');
@@ -340,7 +353,6 @@ export default {
             img.src = url + '?' + Math.random();
         }
 
-        // === 既有邏輯 (保持不變) ===
         function addLog(msg, type='normal') {
             const box = document.getElementById('log-box'); if(!box) return; box.style.display='block';
             box.innerHTML += \`<div class="log-line \${type==='error'?'log-error':type==='info'?'log-info':''}">[\${new Date().toLocaleTimeString()}] \${msg}</div>\`;
@@ -413,8 +425,11 @@ export default {
                 const topResults = results.slice(0, DISPLAY_COUNT);
                 let newHtml = '';
                 topResults.forEach(item => {
+                    const colo = item.colo || 'UNK';
+                    const cnName = COLO_MAP[colo] ? \` (\${COLO_MAP[colo]})\` : '';
+                    const coloDisplay = colo + cnName;
                     const coloStyle = ['HKG','SJC','LAX','TPE'].includes(item.colo) ? 'background:#dcfce7;color:#166534;' : '';
-                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${item.colo}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
+                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${coloDisplay}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
                 });
                 document.getElementById('ip-list').innerHTML = newHtml;
                 try { await api('/upload-results', 'POST', { fastIPs: topResults }); addLog('✅ 結果已上傳'); } catch(e){}
@@ -501,7 +516,16 @@ export default {
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
     const list = data.fastIPs || [];
-    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    
+    let txt = '';
+    if (format === 'ip') {
+        txt = list.map(i => i.ip).join('\n');
+    } else {
+        txt = list.map(i => {
+            const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
+            return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
+        }).join('\n');
+    }
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
@@ -510,7 +534,16 @@ export default {
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
     const list = data.fastIPs || [];
-    let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => `${i.ip}#${i.colo||'UNK'}:${i.latency}ms`).join('\n');
+    
+    let txt = '';
+    if (format === 'ip') {
+        txt = list.map(i => i.ip).join('\n');
+    } else {
+        txt = list.map(i => {
+            const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
+            return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
+        }).join('\n');
+    }
     return new Response(txt, { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
   }
 
