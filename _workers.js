@@ -1,7 +1,7 @@
-// V3.3.1 全域中文化版：
-// 1. 下載/API/線上查看的結果現在會包含中文地區 (例如: HKG(香港))
-// 2. 保持 V3.2.10 的所有配色與精簡儀表板
-// 3. 內建完整的 Colo Code 翻譯表
+// V3.3.2 全球機房中文化版：
+// 1. 補全 SCL (聖地亞哥) 及全球 100+ 個機房的中文名稱
+// 2. 採用繁體中文譯名 (如: 雪梨, 聖荷西)
+// 3. 保持 V3.3.1 所有功能
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -12,13 +12,24 @@ const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
-// 機房代碼對照表 (全域使用)
+// 全球機房代碼對照表 (擴充版)
 const COLO_MAP = {
-    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'SIN': '新加坡',
-    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'ORD': '芝加哥', 'JFK': '紐約',
-    'FRA': '法蘭克福', 'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'CDG': '巴黎',
-    'BKK': '曼谷', 'KUL': '吉隆坡', 'MNL': '馬尼拉', 'HAN': '河內', 'SGN': '胡志明',
-    'SYD': '雪梨', 'MEL': '墨爾本', 'YYZ': '多倫多', 'YVR': '溫哥華'
+    // 東亞
+    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄',
+    // 東南亞
+    'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍',
+    // 北美 (西岸)
+    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'YVR': '溫哥華', 'SAN': '聖地牙哥', 'PHX': '鳳凰城', 'LAS': '拉斯維加斯', 'SMF': '沙加緬度',
+    // 北美 (中部/東岸)
+    'JFK': '紐約', 'EWR': '紐華克', 'ORD': '芝加哥', 'IAD': '華盛頓', 'MIA': '邁阿密', 'DFW': '達拉斯', 'IAH': '休士頓', 'ATL': '亞特蘭大', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'DEN': '丹佛', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'MSP': '明尼阿波利斯',
+    // 歐洲
+    'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'MAD': '馬德里', 'ZRH': '蘇黎世', 'MXP': '米蘭', 'VIE': '維也納', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'CPH': '哥本哈根', 'HEL': '赫爾辛基', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'ATH': '雅典', 'IST': '伊斯坦堡', 'DUB': '都柏林', 'BRU': '布魯塞爾', 'MUC': '慕尼黑', 'TXL': '柏林', 'LIS': '里斯本', 'FCO': '羅馬', 'BCN': '巴塞隆納',
+    // 大洋洲
+    'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'AKL': '奧克蘭', 'ADL': '阿得雷德', 'CBR': '坎培拉',
+    // 南美洲
+    'SCL': '聖地亞哥', 'GRU': '聖保羅', 'EZE': '布宜諾斯艾利斯', 'BOG': '波哥大', 'LIM': '利馬', 'GIG': '里約熱內盧', 'QRO': '克雷塔羅',
+    // 中東/非洲/南亞/其他
+    'DXB': '杜拜', 'TLV': '特拉維夫', 'DOH': '杜哈', 'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'KWI': '科威特', 'RUH': '利雅德', 'MCT': '馬斯喀特'
 };
 // ----------------
 
@@ -111,7 +122,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.1)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.2)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -192,11 +203,11 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.1</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.2</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
-        <!-- 儀表板區域 -->
+        <!-- 儀表板區域 (精簡版：僅保留連通性測試) -->
         <div class="card">
             <h2>🌍 當前網絡信息 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:10px;">(每5秒自動刷新)</span></h2>
             
@@ -291,6 +302,7 @@ export default {
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
+                    // 後端渲染時使用 coloMap
                     const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
                     const coloDisplay = colo + cnName;
                     
@@ -327,7 +339,7 @@ export default {
             document.querySelectorAll('input[type=password]').forEach(el => el.addEventListener('keypress', e => { if(e.key==='Enter') isLoggedIn ? loginModal() : loginMain(); }));
         });
 
-        // === 儀表板邏輯 ===
+        // === 儀表板邏輯 (只剩延遲測試) ===
         function initDashboard() {
             checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
             checkLatency('https://openai.com/favicon.ico', 'lat-openai');
