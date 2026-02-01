@@ -1,7 +1,7 @@
-// V3.3.2 全球機房中文化版：
-// 1. 補全 SCL (聖地亞哥) 及全球 100+ 個機房的中文名稱
-// 2. 採用繁體中文譯名 (如: 雪梨, 聖荷西)
-// 3. 保持 V3.3.1 所有功能
+// V3.3.4 變數修復版：
+// 1. 修復 "coloMap is not defined" 錯誤
+// 2. 統一將機房對照表 (COLO_MAP) 置於全域，確保 API 與網頁皆可讀取
+// 3. 保持所有功能 (多色按鈕、精簡儀表板、API 修復)
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -12,7 +12,7 @@ const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
-// 全球機房代碼對照表 (擴充版)
+// 全球機房代碼對照表 (全域變數，統一使用)
 const COLO_MAP = {
     // 東亞
     'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄',
@@ -122,7 +122,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.2)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.4)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -203,11 +203,11 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.2</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.4</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
-        <!-- 儀表板區域 (精簡版：僅保留連通性測試) -->
+        <!-- 儀表板區域 (精簡版) -->
         <div class="card">
             <h2>🌍 當前網絡信息 <span style="font-size:0.8rem; color:#94a3b8; font-weight:400; margin-left:10px;">(每5秒自動刷新)</span></h2>
             
@@ -302,10 +302,9 @@ export default {
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
-                    // 後端渲染時使用 coloMap
+                    // 使用全域 COLO_MAP 渲染
                     const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
                     const coloDisplay = colo + cnName;
-                    
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
                     return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${coloDisplay}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
@@ -320,7 +319,7 @@ export default {
     <div class="modal" id="token-modal"><div class="modal-content"><h3>⚙️ Token 設定</h3><input type="text" id="token-in" placeholder="Token" style="width:100%; padding:10px; margin:10px 0;"><div style="text-align:right;"><button class="button button-secondary" onclick="document.getElementById('token-modal').style.display='none'">取消</button><button class="button" onclick="saveToken()">儲存</button></div></div></div>
 
     <script>
-        // 傳遞給前端 JS 使用
+        // 傳遞 COLO_MAP 給前端 JS
         const COLO_MAP = ${JSON.stringify(COLO_MAP)};
         let sessionId = '${sessionId || ''}';
         let isLoggedIn = ${isLoggedIn};
@@ -329,17 +328,25 @@ export default {
         const DISPLAY_COUNT = ${FAST_IP_COUNT};
 
         document.addEventListener('DOMContentLoaded', function() {
+            // 自動登入邏輯
+            if (!isLoggedIn) {
+                const savedSession = localStorage.getItem('cf_session');
+                if (savedSession) {
+                    const url = new URL(window.location.href);
+                    if (url.searchParams.get('session') !== savedSession) {
+                        url.searchParams.set('session', savedSession);
+                        window.location.href = url.toString();
+                        return;
+                    }
+                }
+            }
+
             initDashboard();
             setInterval(initDashboard, 5000); 
             
-            if (!isLoggedIn) {
-                const savedPass = localStorage.getItem('cf_admin_pass');
-                if (savedPass) { document.getElementById('main-pass').value = savedPass; document.getElementById('remember-pass-main').checked = true; }
-            }
             document.querySelectorAll('input[type=password]').forEach(el => el.addEventListener('keypress', e => { if(e.key==='Enter') isLoggedIn ? loginModal() : loginMain(); }));
         });
 
-        // === 儀表板邏輯 (只剩延遲測試) ===
         function initDashboard() {
             checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
             checkLatency('https://openai.com/favicon.ico', 'lat-openai');
@@ -382,17 +389,37 @@ export default {
             return (await fetch(url, opts)).json();
         }
 
-        async function loginMain() { performLogin(document.getElementById('main-pass').value, document.getElementById('remember-pass-main').checked); }
-        async function loginModal() { performLogin(document.getElementById('admin-pass').value, true); }
+        async function loginMain() { 
+            const pwd = document.getElementById('main-pass').value;
+            const remember = document.getElementById('remember-pass-main').checked;
+            performLogin(pwd, remember); 
+        }
+        
+        async function loginModal() { 
+            const pwd = document.getElementById('admin-pass').value;
+            performLogin(pwd, false); 
+        }
+
         async function performLogin(password, remember) {
             if(!password) return alert('請輸入密碼');
             const res = await api('/admin-login', 'POST', {password});
             if(res.success) {
-                if(remember) localStorage.setItem('cf_admin_pass', password); else localStorage.removeItem('cf_admin_pass');
-                const url = new URL(window.location.href); url.searchParams.set('session', res.sessionId); window.location.href = url.toString();
+                if(remember) localStorage.setItem('cf_session', res.sessionId);
+                else localStorage.removeItem('cf_session');
+                
+                const url = new URL(window.location.href); 
+                url.searchParams.set('session', res.sessionId); 
+                window.location.href = url.toString();
             } else alert(res.error);
         }
-        async function logout() { await api('/admin-logout', 'POST'); const url = new URL(window.location.href); url.searchParams.delete('session'); window.location.href = url.toString(); }
+        
+        async function logout() { 
+            await api('/admin-logout', 'POST'); 
+            localStorage.removeItem('cf_session');
+            const url = new URL(window.location.href); 
+            url.searchParams.delete('session'); 
+            window.location.href = url.toString(); 
+        }
 
         async function updateIPs() {
             const btn = document.getElementById('update-btn'); btn.disabled = true; btn.innerText = '更新中...';
@@ -405,7 +432,7 @@ export default {
             const allIpElements = document.querySelectorAll('.ip-item');
             let allIps = [];
             try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
-            if(!allIps.length) allIps = Array.from(allIpElements).map(el => el.dataset.ip);
+            if(!allIps.length) allIps = Array.from(allIpElements).map(el.dataset.ip);
             if(!allIps.length) return addLog('❌ 無 IP', 'error');
 
             clearLog(); addLog(\`🚀 測速開始 (\${allIps.length} IPs)\`, 'info');
@@ -528,7 +555,6 @@ export default {
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
     const list = data.fastIPs || [];
-    
     let txt = '';
     if (format === 'ip') {
         txt = list.map(i => i.ip).join('\n');
@@ -546,7 +572,6 @@ export default {
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
     const list = data.fastIPs || [];
-    
     let txt = '';
     if (format === 'ip') {
         txt = list.map(i => i.ip).join('\n');
