@@ -1,7 +1,7 @@
-// V3.3.4 變數修復版：
-// 1. 修復 "coloMap is not defined" 錯誤
-// 2. 統一將機房對照表 (COLO_MAP) 置於全域，確保 API 與網頁皆可讀取
-// 3. 保持所有功能 (多色按鈕、精簡儀表板、API 修復)
+// V3.3.7 全域熱鍵優化版：
+// 1. 修復：無需點擊輸入框，在頁面任意處按 Enter 即可登入
+// 2. 優化：頁面加載時自動聚焦密碼框
+// 3. 保持 V3.3.6 所有功能 (中文化、精簡儀表板、密碼記憶)
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -12,23 +12,15 @@ const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
-// 全球機房代碼對照表 (全域變數，統一使用)
+// 全球機房代碼對照表 (全域變數)
 const COLO_MAP = {
-    // 東亞
     'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄',
-    // 東南亞
     'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍',
-    // 北美 (西岸)
     'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'YVR': '溫哥華', 'SAN': '聖地牙哥', 'PHX': '鳳凰城', 'LAS': '拉斯維加斯', 'SMF': '沙加緬度',
-    // 北美 (中部/東岸)
     'JFK': '紐約', 'EWR': '紐華克', 'ORD': '芝加哥', 'IAD': '華盛頓', 'MIA': '邁阿密', 'DFW': '達拉斯', 'IAH': '休士頓', 'ATL': '亞特蘭大', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'DEN': '丹佛', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'MSP': '明尼阿波利斯',
-    // 歐洲
     'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'MAD': '馬德里', 'ZRH': '蘇黎世', 'MXP': '米蘭', 'VIE': '維也納', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'CPH': '哥本哈根', 'HEL': '赫爾辛基', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'ATH': '雅典', 'IST': '伊斯坦堡', 'DUB': '都柏林', 'BRU': '布魯塞爾', 'MUC': '慕尼黑', 'TXL': '柏林', 'LIS': '里斯本', 'FCO': '羅馬', 'BCN': '巴塞隆納',
-    // 大洋洲
     'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'AKL': '奧克蘭', 'ADL': '阿得雷德', 'CBR': '坎培拉',
-    // 南美洲
     'SCL': '聖地亞哥', 'GRU': '聖保羅', 'EZE': '布宜諾斯艾利斯', 'BOG': '波哥大', 'LIM': '利馬', 'GIG': '里約熱內盧', 'QRO': '克雷塔羅',
-    // 中東/非洲/南亞/其他
     'DXB': '杜拜', 'TLV': '特拉維夫', 'DOH': '杜哈', 'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'KWI': '科威特', 'RUH': '利雅德', 'MCT': '馬斯喀特'
 };
 // ----------------
@@ -47,18 +39,14 @@ export default {
       if (request.method === 'OPTIONS') return handleCORS();
 
       try {
-        // --- 1. 子域名路由 (公開) ---
         if (hostname.startsWith('fast.') || hostname.startsWith('fast-')) return await handleGetFastIPsText(env, request);
         if (hostname.startsWith('browser.') || hostname.startsWith('web.')) return await handleGetBrowserIPsText(env, request);
         if (hostname.startsWith('all.') || hostname.startsWith('ips.') || hostname.startsWith('raw.')) return await handleGetIPs(env, request);
 
-        // --- 2. 主路由 ---
         switch (path) {
           case '/': return await serveHTML(env, request);
-          
           case '/update': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUpdate(env, request); 
           case '/upload-results': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUploadResults(env, request);
-          
           case '/ips': return await handleGetIPs(env, request);
           case '/ip.txt': return await handleGetIPs(env, request);
           case '/raw': return await handleRawIPs(env, request);
@@ -67,14 +55,11 @@ export default {
           case '/browser-ips.txt': return await handleGetBrowserIPsText(env, request);
           case '/speedtest': return await handleSpeedTest(request, env);
           case '/itdog-data': return await handleItdogData(env, request);
-          
           case '/my-ip': return handleUserIP(request);
-
           case '/admin-login': return await handleAdminLogin(request, env);
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
           case '/admin-token': return await handleAdminToken(request, env);
-          
           default: return jsonResponse({ error: 'Endpoint not found' }, 404);
         }
       } catch (error) {
@@ -122,7 +107,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.4)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.7)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -203,7 +188,7 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.4</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.7</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
@@ -302,7 +287,6 @@ export default {
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
-                    // 使用全域 COLO_MAP 渲染
                     const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
                     const coloDisplay = colo + cnName;
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
@@ -328,7 +312,30 @@ export default {
         const DISPLAY_COUNT = ${FAST_IP_COUNT};
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 自動登入邏輯
+            // 全域熱鍵監聽：處理 Enter 鍵登入
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    if (!isLoggedIn) {
+                        // 在鎖定畫面：執行主登入
+                        e.preventDefault();
+                        loginMain();
+                    } else {
+                        // 在管理畫面：檢查彈窗是否開啟
+                        const loginModalEl = document.getElementById('login-modal');
+                        if (loginModalEl && loginModalEl.style.display !== 'none') {
+                            e.preventDefault();
+                            loginModal();
+                        }
+                        const tokenModalEl = document.getElementById('token-modal');
+                        if (tokenModalEl && tokenModalEl.style.display !== 'none') {
+                            e.preventDefault();
+                            saveToken();
+                        }
+                    }
+                }
+            });
+
+            // 自動登入與密碼填充邏輯
             if (!isLoggedIn) {
                 const savedSession = localStorage.getItem('cf_session');
                 if (savedSession) {
@@ -339,14 +346,22 @@ export default {
                         return;
                     }
                 }
+                const savedPass = localStorage.getItem('cf_admin_pass');
+                const passInput = document.getElementById('main-pass');
+                const checkbox = document.getElementById('remember-pass-main');
+                if (savedPass && passInput) {
+                    passInput.value = savedPass;
+                    if(checkbox) checkbox.checked = true;
+                    // 自動聚焦，方便直接按 Enter
+                    passInput.focus();
+                }
             }
 
             initDashboard();
             setInterval(initDashboard, 5000); 
-            
-            document.querySelectorAll('input[type=password]').forEach(el => el.addEventListener('keypress', e => { if(e.key==='Enter') isLoggedIn ? loginModal() : loginMain(); }));
         });
 
+        // === 儀表板邏輯 ===
         function initDashboard() {
             checkLatency('https://github.githubassets.com/favicons/favicon.svg', 'lat-github');
             checkLatency('https://openai.com/favicon.ico', 'lat-openai');
@@ -404,8 +419,13 @@ export default {
             if(!password) return alert('請輸入密碼');
             const res = await api('/admin-login', 'POST', {password});
             if(res.success) {
-                if(remember) localStorage.setItem('cf_session', res.sessionId);
-                else localStorage.removeItem('cf_session');
+                if(remember) {
+                    localStorage.setItem('cf_session', res.sessionId);
+                    localStorage.setItem('cf_admin_pass', password);
+                } else {
+                    localStorage.removeItem('cf_session');
+                    localStorage.removeItem('cf_admin_pass');
+                }
                 
                 const url = new URL(window.location.href); 
                 url.searchParams.set('session', res.sessionId); 
