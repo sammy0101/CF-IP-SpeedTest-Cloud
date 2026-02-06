@@ -1,7 +1,7 @@
-// V3.3.7 全域熱鍵優化版：
-// 1. 修復：無需點擊輸入框，在頁面任意處按 Enter 即可登入
-// 2. 優化：頁面加載時自動聚焦密碼框
-// 3. 保持 V3.3.6 所有功能 (中文化、精簡儀表板、密碼記憶)
+// V3.3.8 機房大全補完版：
+// 1. 修正：補上 SLC (鹽湖城)
+// 2. 擴充：內建全球 200+ 個 Cloudflare 機房中文對照表，大幅減少未翻譯情況
+// 3. 保持 V3.3.7 所有功能 (全域熱鍵、自動登入、精簡儀表板)
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
@@ -12,16 +12,38 @@ const CIDR_SOURCE_URLS = [
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
-// 全球機房代碼對照表 (全域變數)
+// 全球機房代碼對照表 (超級擴充版)
 const COLO_MAP = {
-    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄',
-    'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍',
-    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'YVR': '溫哥華', 'SAN': '聖地牙哥', 'PHX': '鳳凰城', 'LAS': '拉斯維加斯', 'SMF': '沙加緬度',
-    'JFK': '紐約', 'EWR': '紐華克', 'ORD': '芝加哥', 'IAD': '華盛頓', 'MIA': '邁阿密', 'DFW': '達拉斯', 'IAH': '休士頓', 'ATL': '亞特蘭大', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'DEN': '丹佛', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'MSP': '明尼阿波利斯',
-    'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'MAD': '馬德里', 'ZRH': '蘇黎世', 'MXP': '米蘭', 'VIE': '維也納', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'CPH': '哥本哈根', 'HEL': '赫爾辛基', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'ATH': '雅典', 'IST': '伊斯坦堡', 'DUB': '都柏林', 'BRU': '布魯塞爾', 'MUC': '慕尼黑', 'TXL': '柏林', 'LIS': '里斯本', 'FCO': '羅馬', 'BCN': '巴塞隆納',
-    'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'AKL': '奧克蘭', 'ADL': '阿得雷德', 'CBR': '坎培拉',
-    'SCL': '聖地亞哥', 'GRU': '聖保羅', 'EZE': '布宜諾斯艾利斯', 'BOG': '波哥大', 'LIM': '利馬', 'GIG': '里約熱內盧', 'QRO': '克雷塔羅',
-    'DXB': '杜拜', 'TLV': '特拉維夫', 'DOH': '杜哈', 'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'KWI': '科威特', 'RUH': '利雅德', 'MCT': '馬斯喀特'
+    // 亞洲 - 東亞
+    'HKG': '香港', 'TPE': '台北', 'NRT': '東京', 'KIX': '大阪', 'ICN': '首爾', 'FUK': '福岡', 'OKA': '沖繩', 'CTS': '札幌', 'KHH': '高雄', 'NGO': '名古屋',
+    // 亞洲 - 東南亞
+    'SIN': '新加坡', 'KUL': '吉隆坡', 'BKK': '曼谷', 'MNL': '馬尼拉', 'SGN': '胡志明市', 'HAN': '河內', 'CGK': '雅加達', 'KNO': '棉蘭', 'DPS': '峇里島', 'PNH': '金邊', 'RGN': '仰光', 'VTE': '永珍', 'BWN': '汶萊', 'JOG': '日惹', 'CEB': '宿霧',
+    // 亞洲 - 南亞/中亞/西亞
+    'BOM': '孟買', 'DEL': '德里', 'MAA': '清奈', 'HYD': '海得拉巴', 'BLR': '班加羅爾', 'CCU': '班加羅爾', 'COK': '柯欽', 'CMB': '可倫坡', 'KTM': '可倫坡', 'DAC': '達卡', 'ISB': '加德滿都', 'KHI': '卡拉奇', 'LHE': '拉合爾', 'MLE': '馬累', 'KBL': '喀布爾', 'ALA': '阿拉木圖', 'TAS': '塔什干', 'FRU': '比什凱克',
+    // 北美 - 美國 (西岸/山區)
+    'LAX': '洛杉磯', 'SJC': '聖荷西', 'SFO': '舊金山', 'SEA': '西雅圖', 'PDX': '波特蘭', 'SMF': '沙加緬度', 'SAN': '聖地牙哥', 'LAS': '拉斯維加斯', 'PHX': '鳳凰城', 'SLC': '鹽湖城', 'DEN': '丹佛', 'ABQ': '阿布奎基', 'BOI': '波夕', 'HNL': '火奴魯魯',
+    // 北美 - 美國 (中部/南部)
+    'ORD': '芝加哥', 'DFW': '達拉斯', 'IAH': '休士頓', 'AUS': '奧斯汀', 'SAT': '聖安東尼奧', 'MCI': '堪薩斯城', 'STL': '聖路易斯', 'MSP': '明尼阿波利斯', 'OMA': '奧馬哈', 'OKC': '奧克拉荷馬城', 'MSY': '紐奧良', 'BNA': '納許維爾', 'MEM': '曼非斯',
+    // 北美 - 美國 (東岸/東北)
+    'JFK': '紐約', 'EWR': '紐華克', 'LGA': '紐約', 'IAD': '華盛頓', 'DCA': '華盛頓', 'BOS': '波士頓', 'PHL': '費城', 'DTW': '底特律', 'PIT': '匹茲堡', 'CLE': '匹茲堡', 'CMH': '克里夫蘭', 'IND': '哥倫布', 'BUF': '水牛城', 'BWI': '哥倫布',
+    // 北美 - 美國 (東南)
+    'MIA': '邁阿密', 'ATL': '亞特蘭大', 'TPA': '坦帕', 'MCO': '奧蘭多', 'JAX': '傑克遜維爾', 'FLL': '勞德代爾堡', 'CLT': '夏洛特', 'RDU': '羅里', 'RIC': '羅里', 'ORF': '諾福克',
+    // 北美 - 加拿大
+    'YVR': '溫哥華', 'YYZ': '多倫多', 'YUL': '蒙特婁', 'YYC': '卡加利', 'YEG': '卡加利', 'YWG': '愛德蒙頓', 'YOW': '溫尼伯', 'YHZ': '哈利法克斯', 'YQB': '渥太華',
+    // 歐洲 - 西歐/北歐
+    'LHR': '倫敦', 'AMS': '阿姆斯特丹', 'FRA': '法蘭克福', 'CDG': '巴黎', 'ZRH': '蘇黎世', 'BRU': '布魯塞爾', 'DUB': '都柏林', 'MAN': '曼徹斯特', 'EDI': '曼徹斯特', 'GLA': '愛丁堡', 'CWL': '格拉斯哥', 'BFS': '貝爾法斯特', 'LUX': '盧森堡', 'GVA': '日內瓦', 'VIE': '維也納', 'MUC': '慕尼黑', 'TXL': '柏林', 'BER': '柏林', 'HAM': '漢堡', 'DUS': '杜塞道夫', 'STR': '斯圖加特', 'CPH': '哥本哈根', 'ARN': '斯德哥爾摩', 'OSL': '奧斯陸', 'HEL': '赫爾辛基', 'KEF': '雷克雅維克',
+    // 歐洲 - 南歐/東歐
+    'MAD': '馬德里', 'BCN': '巴塞隆納', 'VLC': '瓦倫西亞', 'AGP': '馬拉加', 'LIS': '里斯本', 'OPO': '波多', 'FCO': '羅馬', 'MXP': '米蘭', 'VCE': '威尼斯', 'NAP': '拿坡里', 'PMO': '巴勒莫', 'ATH': '雅典', 'SKG': '塞薩洛尼基', 'IST': '伊斯坦堡', 'WAW': '華沙', 'PRG': '布拉格', 'BUD': '布達佩斯', 'OTP': '布加勒斯特', 'SOF': '索菲亞', 'BEG': '索菲亞', 'ZAG': '貝爾格勒', 'TIA': '地拉那', 'KIV': '奇西瑙', 'KBP': '基輔',
+    // 大洋洲
+    'SYD': '雪梨', 'MEL': '墨爾本', 'BNE': '布里斯本', 'PER': '伯斯', 'ADL': '阿得雷德', 'AKL': '奧克蘭', 'CHC': '基督城', 'CBR': '坎培拉', 'HBA': '荷巴特', 'NOU': '努美阿', 'NAN': '楠迪', 'POM': '莫士比港',
+    // 南美洲
+    'GRU': '聖保羅', 'GIG': '里約熱內盧', 'EZE': '布宜諾斯艾利斯', 'SCL': '聖地亞哥', 'BOG': '波哥大', 'LIM': '利馬', 'UIO': '基多', 'MDE': '麥德林', 'CCS': '卡拉卡斯', 'CLO': '卡利', 'GYE': '瓜亞基爾', 'ASU': '亞松森', 'MVD': '亞松森', 'MGA': '馬拿瓜',
+    // 中美洲/加勒比海
+    'MEX': '墨西哥城', 'QRO': '克雷塔羅', 'GDL': '瓜達拉哈拉', 'MTY': '蒙特雷', 'PTY': '巴拿馬城', 'SJO': '聖荷西(哥斯大黎加)', 'SAL': '聖薩爾瓦多', 'GUA': '瓜地馬拉城', 'KIN': '京斯敦', 'SDQ': '聖多明哥', 'SJU': '聖胡安', 'PAP': '太子港',
+    // 中東
+    'DXB': '杜拜', 'DOH': '杜哈', 'MCT': '馬斯喀特', 'KWI': '科威特', 'BAH': '巴林', 'RUH': '利雅德', 'JED': '吉達', 'DMM': '達曼', 'MED': '麥地那', 'AMM': '安曼', 'TLV': '特拉維夫', 'BEY': '貝魯特', 'EBL': '艾比爾', 'BGW': '巴格達', 'BAS': '巴斯拉',
+    // 非洲
+    'JNB': '約翰尼斯堡', 'CPT': '開普敦', 'DUR': '德班', 'CAI': '開羅', 'CMN': '卡薩布蘭卡', 'TUN': '突尼斯', 'ALG': '阿爾及爾', 'LOS': '拉哥斯', 'ACC': '阿克拉', 'NBO': '奈洛比', 'MBA': '蒙巴薩', 'DAR': '達累斯薩拉姆', 'KGL': '吉佳利', 'EBB': '恩德培', 'ADD': '阿迪斯阿貝巴', 'DKR': '達卡', 'ABJ': '阿必尚', 'LAD': '羅安達', 'MPM': '馬布多', 'HRE': '哈拉雷', 'LUN': '路易薩卡', 'MRU': '路易港', 'TNR': '安塔那那利佛'
 };
 // ----------------
 
@@ -107,7 +129,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.7)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.8)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -188,7 +210,7 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.7</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.8</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
@@ -287,8 +309,10 @@ export default {
                 ${fastIPs.length > 0 ? fastIPs.map(item => {
                     const speedClass = item.latency < 200 ? 'speed-fast-bg' : '';
                     const colo = item.colo || 'UNK';
+                    // 使用全域 COLO_MAP 渲染
                     const cnName = COLO_MAP[colo] ? ` (${COLO_MAP[colo]})` : '';
                     const coloDisplay = colo + cnName;
+                    
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
                     return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${coloDisplay}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
                 }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
@@ -349,6 +373,7 @@ export default {
                 const savedPass = localStorage.getItem('cf_admin_pass');
                 const passInput = document.getElementById('main-pass');
                 const checkbox = document.getElementById('remember-pass-main');
+                
                 if (savedPass && passInput) {
                     passInput.value = savedPass;
                     if(checkbox) checkbox.checked = true;
