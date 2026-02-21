@@ -10,7 +10,6 @@
 
 ## 📸 介面預覽
 
-*(請在下方貼上您的網頁截圖)*
 
 <!-- 💡 請在 GitHub 編輯模式下，把您的截圖直接「複製貼上 (Ctrl+V)」到這行文字的下方，GitHub 會自動生成圖片連結！ -->
 <img width="1374" height="1057" alt="image" src="https://github.com/user-attachments/assets/871dc37b-0993-44a0-85ec-d60482d9fc9c" />
