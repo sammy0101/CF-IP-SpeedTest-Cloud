@@ -3,10 +3,10 @@
 基於 Cloudflare Worker 與 KV Storage 構建的自動化優選 IP 收集、測速與分發平台。
 集成了後端自動測速、瀏覽器端真實延遲測試、以及可視化的管理後台。
 
-> **當前版本**: V3.3.8
+> **當前版本**: V3.3.14
 
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-3.3.8-blue)
+![Version](https://img.shields.io/badge/version-3.3.14-blue)
 
 ## 📸 介面預覽
 
@@ -23,7 +23,7 @@
 
 ## ✨ 主要功能
 
-*   **🌍 全球機房中文化 (V3.3.8)**: 內建全球高達 200+ 個 Cloudflare 機房代碼 (如 HKG, TPE, LAX, SJC, SLC 等) 自動轉換為繁體中文城市名，API、下載文件與線上查看全面同步支援。
+*   **🌍 全球機房中文化 (V3.3.14)**: 內建全球高達 200+ 個 Cloudflare 機房代碼 (如 HKG, TPE, LAX, SJC, SLC 等) 自動轉換為繁體中文城市名，API、下載文件與線上查看全面同步支援。
 *   **🎨 現代化 UI 設計**:
     *   **精簡儀表板**: 自動每 5 秒刷新 HTTP 連通性測試 (GitHub, OpenAI, Bilibili, 淘寶等)，即時掌握國內外網路狀況。
     *   **多彩獨立按鈕**: 清晰的功能分區與視覺優化，包含醒目的深粉紅 ITDog 按鈕。
@@ -123,4 +123,4 @@
 本項目僅供學習與技術研究使用。請勿將其用於任何非法用途。IP 來源取自網絡公開資源，本項目不保證 IP 的可用性與速度。
 
 ---
-*Based on CF-Worker-BestIP-collector V3.3.8*
+*Based on CF-Worker-BestIP-collector V3.3.14*
