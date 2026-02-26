@@ -1,15 +1,15 @@
-// V3.3.13 完美可視化版：
-// 1. 升級：立即更新庫採用「前端調度、後端測速」架構，完美顯示進度條，且測出真實後端延遲
-// 2. 修復：解除 CIDR 展開限制，IP 總數回歸 3500+
-// 3. 智慧儲存：後端測速與本機測速結果分別獨立保存
-// 4. 保持 V3.3.12 的全球機房中文翻譯、全域熱鍵、精簡儀表板
+// V3.3.14 邏輯極速版：
+// 1. 邏輯分離：「立即更新庫」僅負責秒速拉取 GitHub IP 並更新總數，不再進行耗時的後端測速
+// 2. 移除手動觸發後端測速，徹底杜絕 CF Worker 1015 API 限制報錯
+// 3. 後端測速僅保留給 Cron 定時任務在背景自動執行
+// 4. 保持所有中文化與 UI 介面優化
 
 // --- 設定區域 ---
 const FAST_IP_COUNT = 25; // 優質 IP 數量
-const AUTO_TEST_MAX_IPS = 500; // 測速最大數量
+const AUTO_TEST_MAX_IPS = 500; // 定時任務測速最大數量
 
 // IP 來源網址列表
-const CIDR_SOURCE_URLS = [
+const CIDR_SOURCE_URLS =[
     'https://raw.githubusercontent.com/cmliu/cmliu/refs/heads/main/CF-CIDR.txt'
 ];
 
@@ -28,6 +28,7 @@ const COLO_MAP = {
 
 export default {
     async scheduled(event, env, ctx) {
+      // 只有定時任務會在背景執行耗時的測速
       ctx.waitUntil(handleScheduled(env));
     },
   
@@ -46,8 +47,8 @@ export default {
 
         switch (path) {
           case '/': return await serveHTML(env, request);
+          
           case '/update': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUpdate(env, request); 
-          case '/backend-test': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleBackendTest(request, env); 
           case '/upload-results': if (request.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405); return await handleUploadResults(env, request);
           
           case '/ips': return await handleGetIPs(env, request);
@@ -64,6 +65,7 @@ export default {
           case '/admin-status': return await handleAdminStatus(env);
           case '/admin-logout': return await handleAdminLogout(env);
           case '/admin-token': return await handleAdminToken(request, env);
+          
           default: return jsonResponse({ error: 'Endpoint not found' }, 404);
         }
       } catch (error) {
@@ -75,7 +77,8 @@ export default {
   async function handleScheduled(env) {
       const { uniqueIPs, results } = await updateAllIPs(env);
       await env.IP_STORAGE.put('cloudflare_ips', JSON.stringify({ ips: uniqueIPs, lastUpdated: new Date().toISOString(), count: uniqueIPs.length, sources: results }));
-      await autoSpeedTestAndStore(env, uniqueIPs);
+      // 定時任務才會執行完整的後端測速
+      await autoSpeedTestAndStore(env, uniqueIPs, AUTO_TEST_MAX_IPS);
   }
 
   function addAuthToUrl(url, sessionId, tokenConfig) {
@@ -93,11 +96,11 @@ export default {
     const tokenConfig = await getTokenConfig(env);
     
     let data = { count: 0, lastUpdated: null };
-    let fastIPs = [];
+    let fastIPs =[];
     if (isLoggedIn) {
         data = await getStoredIPs(env);
         const speedData = await getStoredSpeedIPs(env);
-        fastIPs = speedData.fastIPs || [];
+        fastIPs = speedData.fastIPs ||[];
     }
     
     let sessionId = null;
@@ -111,7 +114,7 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cloudflare 優選 IP 測速平台 (V3.3.13)</title>
+    <title>Cloudflare 優選 IP 測速平台 (V3.3.14)</title>
     <style>
         :root { --primary: #3b82f6; --bg-card: #ffffff; --bg-inner: #f8fafc; --border: #e2e8f0; --text-main: #334155; --text-sub: #64748b; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -126,6 +129,7 @@ export default {
         .card { background: var(--bg-card); border-radius: 16px; padding: 24px; margin-bottom: 24px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
         .card h2 { font-size: 1.25rem; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; font-weight: 700; }
         
+        /* 延遲測試網格 */
         .latency-section { margin-top: 5px; }
         .latency-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
         .latency-box { background: var(--bg-inner); border: 1px solid var(--border); border-radius: 8px; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; transition: .2s; }
@@ -137,6 +141,7 @@ export default {
         @media (max-width: 1024px) { .latency-row { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 600px) { .latency-row { grid-template-columns: 1fr; gap: 10px; } .header { flex-direction: column; text-align: center; gap: 10px; } }
 
+        /* 統計與按鈕 */
         .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
         .stat { background: var(--bg-inner); padding: 16px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
         .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
@@ -146,6 +151,7 @@ export default {
         .button:hover { background: #2563eb; transform: translateY(-1px); }
         .button:disabled { opacity: 0.6; cursor: not-allowed; }
         
+        /* 按鈕顏色定義 */
         .button-success { background: #10b981; } .button-success:hover { background: #059669; }
         .button-secondary { background: white; color: #475569; border: 1px solid #cbd5e1; } .button-secondary:hover { background: #f1f5f9; }
         .button-purple { background: #8b5cf6; } .button-purple:hover { background: #7c3aed; }
@@ -193,7 +199,7 @@ export default {
 
     <div class="container">
         <div class="header">
-            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.13</p></div>
+            <div class="header-content"><h1>Cloudflare 優選 IP 測速平台</h1><p>V3.3.14</p></div>
             <div><a href="https://github.com/sammy0101/CF-Worker-BestIP-collector" target="_blank" class="social-link">GitHub</a></div>
         </div>
 
@@ -243,7 +249,7 @@ export default {
                 <div class="stat"><div class="stat-value">${fastIPs.length}</div><div>優質 IP</div></div>
             </div>
             <div class="button-group">
-                <button class="button" onclick="updateIPsBackend()" id="update-btn">🔄 立即更新庫</button>
+                <button class="button" onclick="updateIPs()" id="update-btn">🔄 立即更新庫</button>
                 <button class="button button-warning" onclick="startBrowserSpeedTest()" id="speedtest-btn">⚡ 瀏覽器測速</button>
                 
                 <div class="dropdown"><button class="button button-success">🚀 下載中心 ▼</button>
@@ -299,7 +305,7 @@ export default {
                     const coloDisplay = colo + cnName;
                     const coloStyle = ['HKG', 'SJC', 'LAX', 'TPE'].includes(colo) ? 'background:#dcfce7; color:#166534;' : '';
                     return `<div class="ip-item" data-ip="${item.ip}"><div class="ip-info"><span class="colo-badge" style="${coloStyle}">${coloDisplay}</span><span class="ip-address">${item.ip}</span><span class="speed-result ${speedClass}">${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('${item.ip}')">複製</button></div>`;
-                }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊更新</p>'}
+                }).join('') : '<p style="text-align:center; padding:30px; color:#94a3b8;">暫無數據，請點擊【立即更新庫】後，再點擊【瀏覽器測速】</p>'}
             </div>
         </div>
         `}
@@ -453,108 +459,49 @@ export default {
         }
 
         // =====================================
-        // 核心：後端更新 + 前端調度可視化進度條
+        // 極速更新庫 (只抓取 IP 更新總數，不測速)
         // =====================================
-        async function updateIPsBackend() {
-            const btn = document.getElementById('update-btn'); btn.disabled = true; btn.innerText = '更新中...';
+        async function updateIPs() {
+            const btn = document.getElementById('update-btn'); 
+            btn.disabled = true; 
+            btn.innerText = '更新中...';
             clearLog(); 
-            addLog('🚀 [步驟 1/2] 正在拉取並展開最新 IP 庫...', 'info');
+            addLog('🚀 正在從 GitHub 拉取最新 IP 庫...', 'info');
             
-            let allIps = [];
             try { 
                 const res = await api('/update', 'POST'); 
                 if(res.success) { 
-                    addLog(\`✅ IP 庫拉取成功 (共 \${res.totalIPs} 個)\`); 
-                } else { 
+                    addLog(\`✅ IP 庫拉取成功！最新 IP 總數: \${res.totalIPs} 個\`, 'info'); 
+                    setTimeout(() => location.reload(), 1500); 
+                } else {
                     addLog('❌ 拉取失敗: '+res.error, 'error'); 
-                    btn.disabled = false; btn.innerText = '🔄 立即更新庫';
-                    return; 
-                } 
+                }
             } catch(e) { 
-                addLog('❌ '+e.message, 'error'); 
-                btn.disabled = false; btn.innerText = '🔄 立即更新庫';
-                return; 
-            }
-
-            try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
-            
-            if(!allIps.length) {
-                addLog('❌ 無 IP 可測', 'error');
-                btn.disabled = false; btn.innerText = '🔄 立即更新庫';
-                return;
-            }
-
-            addLog(\`🚀 [步驟 2/2] 開始由後端邊緣節點進行測速...\`, 'info');
-            for (let i = allIps.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allIps[i], allIps[j]] = [allIps[j], allIps[i]]; }
-            const targets = allIps.slice(0, MAX_TEST);
-            
-            document.getElementById('progress').style.display = 'block';
-            let count = 0, validResults = [];
-            const BATCH_SIZE = 12; // 分批傳給後端，防超時
-
-            for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-                const batch = targets.slice(i, i + BATCH_SIZE);
-                document.getElementById('status-text').innerText = \`後端測速中 (\${Math.min(i+BATCH_SIZE, targets.length)}/\${targets.length})\`;
-
-                try {
-                    const res = await api('/backend-test', 'POST', { ips: batch });
-                    if (res.success && res.results) {
-                        res.results.forEach(r => {
-                            addLog(\`✅ [\${r.colo}] \${r.ip} - \${r.latency}ms\`, r.latency < 200 ? 'info' : 'normal');
-                            validResults.push(r);
-                        });
-                    }
-                } catch(e) {}
-
-                count += batch.length;
-                document.getElementById('progress-fill').style.width = (count/targets.length*100) + '%';
-            }
-
-            if(validResults.length) {
-                validResults.sort((a,b) => a.latency - b.latency);
-                const topResults = validResults.slice(0, DISPLAY_COUNT);
-                let newHtml = '';
-                topResults.forEach(item => {
-                    const colo = item.colo || 'UNK';
-                    const cnName = COLO_MAP[colo] ? \` (\${COLO_MAP[colo]})\` : '';
-                    const coloDisplay = colo + cnName;
-                    const coloStyle = ['HKG','SJC','LAX','TPE'].includes(item.colo) ? 'background:#dcfce7;color:#166534;' : '';
-                    newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${coloDisplay}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
-                });
-                document.getElementById('ip-list').innerHTML = newHtml;
-                document.getElementById('list-title').innerText = '🏆 優選 IP 列表 (後端實測)';
-
-                try { 
-                    await api('/upload-results', 'POST', { fastIPs: topResults, type: 'backend' }); 
-                    addLog('✅ 後端測速結果已保存'); 
-                } catch(e){}
-            } else {
-                addLog('⚠️ 未測出有效 IP', 'warn');
+                addLog('❌ 網路請求錯誤: '+e.message, 'error'); 
             }
             
-            document.getElementById('progress').style.display = 'none';
-            document.getElementById('status-text').innerText = '後端測速完成';
-            btn.disabled = false; btn.innerText = '🔄 立即更新庫';
+            btn.disabled = false; 
+            btn.innerText = '🔄 立即更新庫';
         }
 
         // =====================================
-        // 本機瀏覽器測速
+        // 瀏覽器測速
         // =====================================
         async function startBrowserSpeedTest() {
             const allIpElements = document.querySelectorAll('.ip-item');
-            let allIps = [];
-            try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips : []; } catch(e) {}
+            let allIps =[];
+            try { const res = await api('/raw'); allIps = res.ips && res.ips.length ? res.ips :[]; } catch(e) {}
             if(!allIps.length) allIps = Array.from(allIpElements).map(el => el.dataset.ip);
-            if(!allIps.length) return addLog('❌ 無 IP，請先點擊立即更新庫', 'error');
+            if(!allIps.length) return addLog('❌ 無 IP，請先點擊「立即更新庫」', 'error');
 
-            clearLog(); addLog(\`🚀 開始本機瀏覽器測速 (\${allIps.length} IPs)\`, 'info');
+            clearLog(); addLog(\`🚀 測速開始 (\${allIps.length} IPs)\`, 'info');
             for (let i = allIps.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [allIps[i], allIps[j]] = [allIps[j], allIps[i]]; }
             const targets = allIps.slice(0, MAX_TEST);
             
             document.getElementById('progress').style.display = 'block';
-            let count = 0, results = [];
+            let count = 0, results =[];
             for(const ip of targets) {
-                document.getElementById('status-text').innerText = \`本機測速中 \${ip} (\${count+1}/\${targets.length})\`;
+                document.getElementById('status-text').innerText = \`測試 \${ip} (\${count+1}/\${targets.length})\`;
                 try {
                     const start = performance.now();
                     const controller = new AbortController();
@@ -563,7 +510,7 @@ export default {
                     const data = await res.json();
                     const lat = Math.round(performance.now() - start);
                     if(data.success) {
-                        addLog(\`✅ [\${data.colo}] \${ip} - \${lat}ms\`, lat<200?'info':'normal');
+                        addLog(\`✅[\${data.colo}] \${ip} - \${lat}ms\`, lat<200?'info':'normal');
                         results.push({ip, latency: lat, colo: data.colo || 'UNK'});
                     }
                 } catch(e) {}
@@ -583,15 +530,10 @@ export default {
                     newHtml += \`<div class="ip-item" data-ip="\${item.ip}"><div class="ip-info"><span class="colo-badge" style="\${coloStyle}">\${coloDisplay}</span><span class="ip-address">\${item.ip}</span><span class="speed-result">\${item.latency}ms</span></div><button class="small-btn" onclick="copyIP('\${item.ip}')">複製</button></div>\`;
                 });
                 document.getElementById('ip-list').innerHTML = newHtml;
-                document.getElementById('list-title').innerText = '🏆 優選 IP 列表 (本機實測)';
-
-                try { 
-                    await api('/upload-results', 'POST', { fastIPs: topResults, type: 'browser' }); 
-                    addLog('✅ 本機測速結果已保存'); 
-                } catch(e){}
+                try { await api('/upload-results', 'POST', { fastIPs: topResults }); addLog('✅ 結果已上傳'); } catch(e){}
             }
             document.getElementById('progress').style.display = 'none';
-            document.getElementById('status-text').innerText = '本機測速完成';
+            document.getElementById('status-text').innerText = '測速完成';
         }
 
         function downloadBrowserResults() {
@@ -609,10 +551,25 @@ export default {
 
         function openTokenModal() { document.getElementById('token-modal').style.display='flex'; }
         async function saveToken() {
-            const token = document.getElementById('token-in').value;
-            const res = await api('/admin-token', 'POST', {token, neverExpire: document.getElementById('never-expire').checked, expiresDays: 30});
-            if(res.success) location.reload();
+            const tokenEl = document.getElementById('token-in');
+            const neverExpireEl = document.getElementById('never-expire');
+            const expireDaysEl = document.getElementById('expire-days');
+            
+            if(!tokenEl || !neverExpireEl || !expireDaysEl) return alert('系統錯誤：找不到輸入框');
+            
+            const token = tokenEl.value;
+            const neverExpire = neverExpireEl.checked;
+            const expiresDays = parseInt(expireDaysEl.value) || 30;
+            
+            const res = await api('/admin-token', 'POST', {token, neverExpire, expiresDays});
+            if(res.success) {
+                alert('Token 保存成功');
+                location.reload();
+            } else {
+                alert('失敗: ' + res.error);
+            }
         }
+        
         function copyIP(ip) { navigator.clipboard.writeText(ip); alert('已複製'); }
         function copyAllFastIPs() { 
             const ips = Array.from(document.querySelectorAll('.ip-address')).map(el => el.innerText).join('\\n');
@@ -635,51 +592,24 @@ export default {
   async function handleUpdate(env, request) {
     if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
     const start = Date.now();
+    
+    // 僅拉取 IP 不測速
     const { uniqueIPs, results } = await updateAllIPs(env);
+    
     await env.IP_STORAGE.put('cloudflare_ips', JSON.stringify({
       ips: uniqueIPs, lastUpdated: new Date().toISOString(), count: uniqueIPs.length, sources: results
     }));
+    
     return jsonResponse({ success: true, duration: (Date.now()-start)+'ms', totalIPs: uniqueIPs.length });
-  }
-
-  // 新增：處理前端發送的批次後端測速請求
-  async function handleBackendTest(request, env) {
-    if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
-    try {
-        const body = await request.json();
-        const ips = body.ips;
-        if (!ips || !Array.isArray(ips)) return jsonResponse({ error: 'Invalid data' }, 400);
-
-        const targets = ips.slice(0, 15); // 限制每次最多測 15 個防超時
-        const promises = targets.map(ip => testIPSpeed(ip));
-        const outcomes = await Promise.allSettled(promises);
-        const results = [];
-        
-        for (const out of outcomes) {
-            if (out.status === 'fulfilled' && out.value && out.value.success) {
-                results.push({ ip: out.value.ip, latency: Math.round(out.value.latency), colo: out.value.colo });
-            }
-        }
-        return jsonResponse({ success: true, results });
-    } catch (e) {
-        return jsonResponse({ error: e.message }, 500);
-    }
   }
 
   async function handleUploadResults(env, request) {
       if (!await verifyAdmin(request, env)) return jsonResponse({ error: '需要權限' }, 401);
       try {
-          const body = await request.json();
-          const fastIPs = body.fastIPs;
-          const type = body.type || 'browser'; 
-          
+          const { fastIPs } = await request.json();
           if (!fastIPs || !Array.isArray(fastIPs)) return jsonResponse({ error: '無效數據' }, 400);
-          
-          const targetKey = type === 'backend' ? 'cloudflare_fast_ips' : 'browser_fast_ips';
-          const sourceName = type === 'backend' ? 'frontend_triggered_backend' : 'browser_upload';
-
-          await env.IP_STORAGE.put(targetKey, JSON.stringify({
-              fastIPs: fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: sourceName
+          await env.IP_STORAGE.put('browser_fast_ips', JSON.stringify({
+              fastIPs: fastIPs, lastTested: new Date().toISOString(), count: fastIPs.length, source: 'browser_upload'
           }));
           return jsonResponse({ success: true });
       } catch (e) { return jsonResponse({ error: e.message }, 500); }
@@ -697,7 +627,7 @@ export default {
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredSpeedIPs(env);
-    const list = data.fastIPs || [];
+    const list = data.fastIPs ||[];
     let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => {
         const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
         return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
@@ -709,7 +639,7 @@ export default {
     const url = new URL(request.url);
     const format = url.searchParams.get('format');
     const data = await getStoredBrowserIPs(env);
-    const list = data.fastIPs || [];
+    const list = data.fastIPs ||[];
     let txt = format === 'ip' ? list.map(i => i.ip).join('\n') : list.map(i => {
         const cn = COLO_MAP[i.colo] ? `(${COLO_MAP[i.colo]})` : '';
         return `${i.ip}#${i.colo}${cn}:${i.latency}ms`;
@@ -722,12 +652,13 @@ export default {
   async function handleRawIPs(env, request) { return jsonResponse(await getStoredIPs(env)); }
   async function handleItdogData(env, request) { const d = await getStoredSpeedIPs(env); return jsonResponse({ ips: (d.fastIPs||[]).map(i => i.ip) }); }
 
-  async function autoSpeedTestAndStore(env, ips) {
+  // 僅限 Cron 定時任務調用
+  async function autoSpeedTestAndStore(env, ips, limit = AUTO_TEST_MAX_IPS) {
     if (!ips || !ips.length) return null;
     let randomIPs = [...ips];
     for (let i = randomIPs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [randomIPs[i], randomIPs[j]] = [randomIPs[j], randomIPs[i]]; }
-    const targets = randomIPs.slice(0, AUTO_TEST_MAX_IPS);
-    const results = [];
+    const targets = randomIPs.slice(0, limit);
+    const results =[];
     const BATCH = 5;
     for (let i = 0; i < targets.length; i += BATCH) {
       const batch = targets.slice(i, i + BATCH);
@@ -775,19 +706,20 @@ export default {
 
   function expandCIDR(cidr) { 
       try { 
-          const [ip, m] = cidr.split('/'); 
+          const[ip, m] = cidr.split('/'); 
           const mask = parseInt(m); 
           if(isNaN(mask)||mask>32) return [ip]; 
           if(mask===32) return [ip]; 
           const start = ipToNum(ip); 
           const len = Math.pow(2, 32-mask); 
-          const res = []; 
+          const res =[]; 
+          // 完整展開，每個子網最多取 256 個 IP 確保總數達 3500+
           const max = len > 256 ? 256 : len; 
           for(let i=0; i<max; i++) {
               res.push(numToIp(start + i));
           }
           return res; 
-      } catch { return []; } 
+      } catch { return[]; } 
   }
 
   async function updateAllIPs(env) {
@@ -798,10 +730,10 @@ export default {
     for (const url of urls) {
         try {
             const txt = await fetchURLWithTimeout(url);
-            const matches = txt.match(cidrRegex) || [];
+            const matches = txt.match(cidrRegex) ||[];
             let count = 0;
-            const maxMatches = matches.slice(0, 3000); 
-            maxMatches.forEach(m => {
+            // 取消嚴格限制，允許展開所有符合的 CIDR
+            matches.forEach(m => {
                 if(m.includes('/')) {
                     expandCIDR(m).forEach(ip => { uniqueIPs.add(ip); count++; });
                 } else {
@@ -872,7 +804,7 @@ export default {
   async function getStoredBrowserIPs(env) { try { return JSON.parse(await env.IP_STORAGE.get('browser_fast_ips')) || {fastIPs:[]}; } catch { return {fastIPs:[]}; } }
   
   function ipToNum(ip) { return ip.split('.').reduce((a,b) => (a<<8)+parseInt(b),0)>>>0; }
-  function numToIp(n) { return [(n>>>24)&255, (n>>>16)&255, (n>>>8)&255, n&255].join('.'); }
+  function numToIp(n) { return[(n>>>24)&255, (n>>>16)&255, (n>>>8)&255, n&255].join('.'); }
   function isValidIPv4(ip) { return /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip); }
   async function fetchURLWithTimeout(url) { const c = new AbortController(); setTimeout(() => c.abort(), 8000); const res = await fetch(url, { signal: c.signal, headers: {'User-Agent': 'CF-Worker'} }); if(!res.ok) throw new Error('HTTP Error: ' + res.status + ' ' + res.statusText); return await res.text(); }
   function jsonResponse(data, status=200) { return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }); }
